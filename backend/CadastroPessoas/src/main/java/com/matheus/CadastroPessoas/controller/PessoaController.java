@@ -6,6 +6,9 @@ import com.matheus.CadastroPessoas.service.GerarRelatorioService;
 import com.matheus.CadastroPessoas.service.PessoaService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,7 +20,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 
 @RestController
 @RequestMapping("/pessoas")
@@ -41,13 +43,19 @@ public class PessoaController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Pessoa>> listar() {
-        return ResponseEntity.ok(service.listar());
+    public ResponseEntity<Page<Pessoa>> listar(@PageableDefault(size = 10) Pageable pageable) {
+        Page<Pessoa> pessoas = service.listar(pageable);
+        return ResponseEntity.ok(pessoas);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Pessoa> buscarPorId(@PathVariable Long id) {
         return ResponseEntity.ok(service.buscarPorId(id));
+    }
+
+    @GetMapping("/cpf/{cpf}")
+    public ResponseEntity<Pessoa> buscarPorCpf(@PathVariable String cpf) {
+        return ResponseEntity.ok(service.buscarPorCpf(cpf));
     }
 
     @DeleteMapping("/{id}")

@@ -1,29 +1,86 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 
 export default function TableBody() {
-  const [useUsers, setUsers] = useState([]);
+  const [visibleUsers, setVisibleUsers] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
+  const [pageNumber, setPageNumber] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // load a specific page from the backend (server-side pagination)
+  const loadPage = useCallback(async (page = 0, size = pageSize) => {
+    try {
+      const res = await fetch(`/pessoas?page=${page}&size=${size}`);
+      const data = await res.json();
+      const content = data.content ?? data;
+      setVisibleUsers(content);
+      const current = data.number ?? page;
+      setPageNumber(current);
+
+      // inform UI (Main) about current pagination state
+      window.dispatchEvent(
+        new CustomEvent("pageInfo", {
+          detail: {
+            pageNumber: current,
+            pageSize: size,
+            totalPages: data.totalPages ?? 1,
+            totalElements: data.totalElements ?? (content ? content.length : 0),
+          },
+        })
+      );
+    } catch (e) {
+      console.error("Error loading page:", e);
+    }
+  }, [pageSize]);
 
   useEffect(() => {
-    async function _fetchData() {
-      try {
-        const res = await fetch(`/pessoas`, { method: "GET" });
-        const data = await res.json();
-        console.log("fetched users:", data);
-        setUsers(data);
-      } catch (e) {
-        console.log(e);
-      }
-    }
-    _fetchData();
-    const handler = (e) => {
-      const newUser = e.detail;
-      if (newUser) setUsers((prev) => [newUser, ...prev]);
+    // load first page on mount (defer to avoid synchronous setState in effect)
+    setTimeout(() => loadPage(0, pageSize), 0);
+
+    const createdHandler = () => {
+      // after creating a user, reload first page to keep ordering predictable
+      loadPage(0, pageSize);
     };
-    window.addEventListener("userCreated", handler);
-    return () => window.removeEventListener("userCreated", handler);
-  }, []);
+
+    const searchHandler = (e) => {
+      const pessoa = e.detail;
+      if (pessoa) {
+        setVisibleUsers([pessoa]);
+        setPageNumber(0);
+        window.dispatchEvent(
+          new CustomEvent("pageInfo", {
+            detail: {
+              pageNumber: 0,
+              pageSize: 1,
+              totalPages: 1,
+              totalElements: 1,
+            },
+          })
+        );
+      }
+    };
+
+    const clearHandler = () => {
+      loadPage(0, pageSize);
+    };
+
+    const goToPageHandler = (e) => {
+      const { page, size } = e.detail || {};
+      if (size) setPageSize(size);
+      loadPage(page ?? 0, size ?? pageSize);
+    };
+
+    window.addEventListener("userCreated", createdHandler);
+    window.addEventListener("searchResult", searchHandler);
+    window.addEventListener("clearSearch", clearHandler);
+    window.addEventListener("goToPage", goToPageHandler);
+    return () => {
+      window.removeEventListener("userCreated", createdHandler);
+      window.removeEventListener("searchResult", searchHandler);
+      window.removeEventListener("clearSearch", clearHandler);
+      window.removeEventListener("goToPage", goToPageHandler);
+    };
+  }, [loadPage, pageSize]);
 
   const handleDeleteUser = async (id) => {
     try {
@@ -31,7 +88,8 @@ export default function TableBody() {
       await fetch(`/pessoas/${id}`, {
         method: "DELETE",
       });
-      setUsers((prevUsers) => prevUsers.filter((user) => user.id !== id));
+      // reload current page after delete to keep pagination consistent
+      await loadPage(pageNumber, pageSize);
     } catch (error) {
       console.error("Error deleting user:", error);
       alert("Erro ao deletar usuário: " + (error.message || error));
@@ -47,10 +105,9 @@ export default function TableBody() {
         },
         body: JSON.stringify(editingUser),
       });
-      const updatedUser = await res.json();
-      setUsers(
-        useUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u))
-      );
+      await res.json();
+      // refresh current page after update to reflect any server-side changes
+      await loadPage(pageNumber, pageSize);
       setEditingUser(null);
     } catch (error) {
       console.error("Error saving user:", error);
@@ -61,7 +118,7 @@ export default function TableBody() {
   return (
     <>
       <tbody>
-        {useUsers.map((user) => (
+        {visibleUsers.map((user) => (
           <tr key={user.id}>
             <td className="px-4">{user.nome}</td>
             <td className="px-4">{user.cpf}</td>
@@ -135,7 +192,7 @@ export default function TableBody() {
                 </button>
                 <button
                   className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                  onClick={() => handleSave(editingUser)}
+                  onClick={handleSave}
                 >
                   Salvar
                 </button>

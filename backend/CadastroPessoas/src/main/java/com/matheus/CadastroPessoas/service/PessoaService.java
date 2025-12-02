@@ -4,9 +4,10 @@ import com.matheus.CadastroPessoas.entity.Pessoa;
 import com.matheus.CadastroPessoas.dto.PessoaDTO;
 import com.matheus.CadastroPessoas.exception.PessoaNotFoundException;
 import com.matheus.CadastroPessoas.repository.PessoaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
+import com.matheus.CadastroPessoas.exception.PessoaNotFoundByCpfException;
 
 @Service
 public class PessoaService {
@@ -32,14 +33,19 @@ public class PessoaService {
         return repository.save(pessoa);
     }
 
-    public List<Pessoa> listar() {
-        return repository.findAll();
+    public Page<Pessoa> listar(Pageable pageable) {
+        return repository.findAll(pageable);
     }
 
     public Pessoa buscarPorId(Long id) {
         return repository.findById(id).orElseThrow(() ->
                 new PessoaNotFoundException(id));
     }
+
+    public Pessoa buscarPorCpf(String cpf) {
+    return repository.findByCpf(cpf).orElseThrow(() ->
+            new PessoaNotFoundByCpfException(cpf));
+}
 
     public void remover(Long id) {
         if (!repository.existsById(id)) {
@@ -59,4 +65,3 @@ public class PessoaService {
         return repository.save(pessoaExistente);
     }
 }
-
